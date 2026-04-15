@@ -50,7 +50,7 @@ const list = async ({ user_id, book_id, returned, sort = 'created_at', order = '
   }
 
   const where = filterClauses.length ? `WHERE ${filterClauses.join(' AND ')}` : '';
-  const field = allowedSortFields.includes(sort) ? sort : 'created_at';
+  const field = allowedSortFields.includes(sort) ? `l.${sort}` : 'l.created_at';
   const orderDirection = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const offset = (Number(page) - 1) * Number(limit);
 

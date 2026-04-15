@@ -1,4 +1,5 @@
 const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const { databaseFile } = require('./database');
 
@@ -63,6 +64,8 @@ const initDB = async () => {
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )`);
 
+  // Drop and recreate loans table to remove UNIQUE constraint
+  await run(`DROP TABLE IF EXISTS loans`);
   await run(`CREATE TABLE IF NOT EXISTS loans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -73,9 +76,72 @@ const initDB = async () => {
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
-    UNIQUE(user_id, book_id)
+    FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
   )`);
+
+  const userCount = await get('SELECT COUNT(*) AS count FROM users');
+  let defaultUserId = null;
+
+  if (!userCount || !userCount.count) {
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    const result = await run(
+      `INSERT INTO users (name, email, password, role, created_at, updated_at)
+       VALUES (?, ?, ?, 'admin', datetime('now'), datetime('now'))`,
+      ['Administrador', 'admin@biblioteca.com', hashedPassword]
+    );
+    defaultUserId = result.lastID;
+  } else {
+    const adminUser = await get("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+    if (adminUser) {
+      defaultUserId = adminUser.id;
+    } else {
+      const hashedPassword = await bcrypt.hash('admin123', 10);
+      const result = await run(
+        `INSERT INTO users (name, email, password, role, created_at, updated_at)
+         VALUES (?, ?, ?, 'admin', datetime('now'), datetime('now'))`,
+        ['Administrador', 'admin@biblioteca.com', hashedPassword]
+      );
+      defaultUserId = result.lastID;
+    }
+  }
+
+  const bookCount = await get('SELECT COUNT(*) AS count FROM books');
+  if ((!bookCount || !bookCount.count) && defaultUserId) {
+    const sampleBooks = [
+      {
+        title: 'O Senhor dos Anéis',
+        author: 'J.R.R. Tolkien',
+        isbn: '9780261103252',
+        description: 'Uma aventura épica pela Terra Média.',
+        published_year: 1954,
+        available: 1,
+      },
+      {
+        title: 'Dom Casmurro',
+        author: 'Machado de Assis',
+        isbn: '9788535912498',
+        description: 'Romance clássico brasileiro sobre ciúme e memória.',
+        published_year: 1899,
+        available: 1,
+      },
+      {
+        title: '1984',
+        author: 'George Orwell',
+        isbn: '9780451524935',
+        description: 'Distopia política sobre vigilância e controle.',
+        published_year: 1949,
+        available: 1,
+      },
+    ];
+
+    for (const book of sampleBooks) {
+      await run(
+        `INSERT INTO books (title, author, isbn, description, published_year, available, user_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+        [book.title, book.author, book.isbn, book.description, book.published_year, book.available, defaultUserId]
+      );
+    }
+  }
 };
 
 module.exports = {

@@ -1,12 +1,12 @@
 const { run, get, all } = require('../config/db');
 
-const allowedSortFields = ['id', 'title', 'published', 'created_at', 'updated_at'];
+const allowedSortFields = ['id', 'title', 'published_year', 'created_at', 'updated_at'];
 
-const create = async ({ title, content, published, user_id }) => {
+const create = async ({ title, author, isbn, description, published_year, available, user_id }) => {
   const result = await run(
-    `INSERT INTO posts (title, content, published, user_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
-    [title, content, published ? 1 : 0, user_id]
+    `INSERT INTO books (title, author, isbn, description, published_year, available, user_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    [title, author, isbn, description || null, published_year || null, available ? 1 : 0, user_id]
   );
 
   return findById(result.lastID);
@@ -14,39 +14,61 @@ const create = async ({ title, content, published, user_id }) => {
 
 const findById = async (id) =>
   get(
-    `SELECT p.id, p.title, p.content, p.published, p.user_id, p.created_at, p.updated_at,
-            u.name AS author_name, u.email AS author_email
-     FROM posts p
-     JOIN users u ON p.user_id = u.id
-     WHERE p.id = ?`,
+    `SELECT b.id, b.title, b.author, b.isbn, b.description, b.published_year, b.available,
+            b.user_id, b.created_at, b.updated_at,
+            u.name AS creator_name, u.email AS creator_email
+     FROM books b
+     JOIN users u ON b.user_id = u.id
+     WHERE b.id = ?`,
     [id]
   );
 
-const list = async ({ title, user_id, sort = 'created_at', order = 'desc', page = 1, limit = 10 }) => {
+const list = async ({ keyword, title, author, isbn, available, user_id, sort = 'created_at', order = 'desc', page = 1, limit = 10 }) => {
   const filterClauses = [];
   const params = [];
 
+  if (keyword) {
+    filterClauses.push('(b.title LIKE ? OR b.author LIKE ? OR b.isbn LIKE ?)');
+    params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+  }
+
   if (title) {
-    filterClauses.push('p.title LIKE ?');
+    filterClauses.push('b.title LIKE ?');
     params.push(`%${title}%`);
   }
 
+  if (author) {
+    filterClauses.push('b.author LIKE ?');
+    params.push(`%${author}%`);
+  }
+
+  if (isbn) {
+    filterClauses.push('b.isbn LIKE ?');
+    params.push(`%${isbn}%`);
+  }
+
+  if (available !== undefined) {
+    filterClauses.push('b.available = ?');
+    params.push(available ? 1 : 0);
+  }
+
   if (user_id) {
-    filterClauses.push('p.user_id = ?');
+    filterClauses.push('b.user_id = ?');
     params.push(Number(user_id));
   }
 
   const where = filterClauses.length ? `WHERE ${filterClauses.join(' AND ')}` : '';
-  const field = allowedSortFields.includes(sort) ? sort : 'created_at';
+  const field = allowedSortFields.includes(sort) ? `b.${sort}` : 'b.created_at';
   const orderDirection = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const offset = (Number(page) - 1) * Number(limit);
 
-  const totalRow = await get(`SELECT COUNT(*) AS count FROM posts p ${where}`, params);
-  const posts = await all(
-    `SELECT p.id, p.title, p.content, p.published, p.user_id, p.created_at, p.updated_at,
-            u.name AS author_name, u.email AS author_email
-     FROM posts p
-     JOIN users u ON p.user_id = u.id
+  const totalRow = await get(`SELECT COUNT(*) AS count FROM books b ${where}`, params);
+  const books = await all(
+    `SELECT b.id, b.title, b.author, b.isbn, b.description, b.published_year, b.available,
+            b.user_id, b.created_at, b.updated_at,
+            u.name AS creator_name, u.email AS creator_email
+     FROM books b
+     JOIN users u ON b.user_id = u.id
      ${where}
      ORDER BY ${field} ${orderDirection}
      LIMIT ?
@@ -56,9 +78,9 @@ const list = async ({ title, user_id, sort = 'created_at', order = 'desc', page 
 
   return {
     total: totalRow ? totalRow.count : 0,
-    data: posts.map((post) => ({
-      ...post,
-      published: Boolean(post.published),
+    data: books.map((book) => ({
+      ...book,
+      available: Boolean(book.available),
     })),
   };
 };
@@ -90,7 +112,7 @@ const update = async (id, data) => {
   params.push(id);
 
   await run(
-    `UPDATE posts SET ${updates.join(', ')}, updated_at = ? WHERE id = ?`,
+    `UPDATE books SET ${updates.join(', ')}, updated_at = ? WHERE id = ?`,
     params
   );
 
@@ -98,7 +120,7 @@ const update = async (id, data) => {
 };
 
 const remove = async (id) => {
-  const result = await run('DELETE FROM posts WHERE id = ?', [id]);
+  const result = await run('DELETE FROM books WHERE id = ?', [id]);
   return result.changes > 0;
 };
 

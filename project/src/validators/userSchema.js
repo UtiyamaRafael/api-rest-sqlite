@@ -27,8 +27,8 @@ const listSchema = z.object({
   role: z.string().optional(),
   sort: z.string().optional(),
   order: z.enum(['asc', 'desc']).optional(),
-  page: z.preprocess((value) => Number(value), z.number().int().positive().optional()),
-  limit: z.preprocess((value) => Number(value), z.number().int().positive().optional()),
+  page: z.preprocess((value) => value === undefined ? undefined : Number(value), z.number().int().positive().optional()),
+  limit: z.preprocess((value) => value === undefined ? undefined : Number(value), z.number().int().positive().optional()),
 });
 
 const idParamSchema = z.object({

@@ -22,7 +22,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
       showMain();
       showAlert('Login realizado com sucesso!', 'success');
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -46,7 +46,7 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
       showAlert('Registro realizado! Faça login.', 'success');
       showLogin();
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -112,8 +112,12 @@ function showAlert(message, type = 'info') {
     ${message}
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   `;
-  document.querySelector('.container').prepend(alertDiv);
+  document.body.prepend(alertDiv);
   setTimeout(() => alertDiv.remove(), 5000);
+}
+
+function getErrorMessage(data) {
+  return data?.message || data?.error || 'Erro desconhecido';
 }
 
 function jwt_decode(token) {
@@ -137,47 +141,103 @@ async function loadBooks(page = 1, limit = 12, filters = {}) {
     const params = new URLSearchParams();
     params.set('page', page);
     params.set('limit', limit);
+    if (filters.keyword) params.set('keyword', filters.keyword);
     if (filters.title) params.set('title', filters.title);
     if (filters.author) params.set('author', filters.author);
+    if (filters.isbn) params.set('isbn', filters.isbn);
+    if (filters.available !== undefined) params.set('available', filters.available);
 
     const res = await apiCall(`${API_BASE}/api/books?${params.toString()}`);
     const data = await res.json();
     if (res.ok) {
-      renderBooks(data.data, data.meta);
+      renderBooks(data.data, data.meta, filters);
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
   }
 }
 
-function renderBooks(books, meta) {
+function renderBooks(books, meta, currentFilters = {}) {
+  const activeFiltersCount = Object.values(currentFilters).filter(value =>
+    value !== undefined && value !== '' && value !== null
+  ).length;
+
   const content = document.getElementById('content');
   content.innerHTML = `
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h2><i class="bi bi-book"></i> Livros Disponíveis</h2>
-      <button id="create-book-btn" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> Cadastrar Livro
-      </button>
-    </div>
-
-    <div class="filters mb-4">
-      <div class="row g-3">
-        <div class="col-md-4">
-          <input type="text" class="form-control" id="book-title-filter" placeholder="Buscar por título">
-        </div>
-        <div class="col-md-4">
-          <input type="text" class="form-control" id="book-author-filter" placeholder="Buscar por autor">
-        </div>
-        <div class="col-md-4">
-          <button id="apply-book-filters" class="btn btn-outline-primary w-100">Buscar</button>
-        </div>
+      <div>
+        ${activeFiltersCount > 0 ? `<span class="badge bg-info me-2">${activeFiltersCount} filtro(s) ativo(s)</span>` : ''}
+        <button id="create-book-btn" class="btn btn-primary">
+          <i class="bi bi-plus-circle"></i> Cadastrar Livro
+        </button>
       </div>
     </div>
 
+    <div class="filters mb-4">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtros de Busca</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label for="book-keyword-filter" class="form-label">Busca Geral</label>
+              <input type="text" class="form-control" id="book-keyword-filter" placeholder="Buscar em título, autor ou ISBN" value="${currentFilters.keyword || ''}">
+            </div>
+            <div class="col-md-2">
+              <label for="book-title-filter" class="form-label">Título</label>
+              <input type="text" class="form-control" id="book-title-filter" placeholder="Buscar por título" value="${currentFilters.title || ''}">
+            </div>
+            <div class="col-md-2">
+              <label for="book-author-filter" class="form-label">Autor</label>
+              <input type="text" class="form-control" id="book-author-filter" placeholder="Buscar por autor" value="${currentFilters.author || ''}">
+            </div>
+            <div class="col-md-2">
+              <label for="book-isbn-filter" class="form-label">ISBN</label>
+              <input type="text" class="form-control" id="book-isbn-filter" placeholder="Buscar por ISBN" value="${currentFilters.isbn || ''}">
+            </div>
+            <div class="col-md-3">
+              <label for="book-available-filter" class="form-label">Disponibilidade</label>
+              <select class="form-select" id="book-available-filter">
+                <option value="">Todos</option>
+                <option value="true" ${currentFilters.available === 'true' ? 'selected' : ''}>Disponíveis</option>
+                <option value="false" ${currentFilters.available === 'false' ? 'selected' : ''}>Emprestados</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-3 mt-2">
+            <div class="col-md-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="auto-search-toggle">
+                <label class="form-check-label" for="auto-search-toggle">
+                  Busca automática
+                </label>
+              </div>
+            </div>
+            <div class="col-md-6 text-end">
+              <small class="text-muted">${meta.total} livro(s) encontrado(s)</small>
+            </div>
+          </div>
+          <div class="row g-3 mt-2">
+            <div class="col-md-6">
+              <button id="apply-book-filters" class="btn btn-primary me-2">
+                <i class="bi bi-search"></i> Buscar
+              </button>
+              <button id="clear-book-filters" class="btn btn-outline-secondary">
+                <i class="bi bi-x-circle"></i> Limpar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
     <div class="row" id="books-grid">
-      ${books.map(book => `
+      ${books.length > 0 ? books.map(book => `
         <div class="col-md-4 col-lg-3 mb-4">
           <div class="card book-card h-100">
             <div class="card-body d-flex flex-column">
@@ -203,7 +263,13 @@ function renderBooks(books, meta) {
             </div>
           </div>
         </div>
-      `).join('')}
+      `).join('') : `
+        <div class="col-12">
+          <div class="alert alert-secondary text-center" role="alert">
+            Nenhum livro encontrado. Cadastre novos livros para preencher o catálogo.
+          </div>
+        </div>
+      `}
     </div>
 
     <nav aria-label="Navegação de livros">
@@ -221,10 +287,64 @@ function renderBooks(books, meta) {
     </nav>
   `;
 
+  // Busca automática
+  const autoSearchToggle = document.getElementById('auto-search-toggle');
+  const filterInputs = ['book-keyword-filter', 'book-title-filter', 'book-author-filter', 'book-isbn-filter', 'book-available-filter'];
+
+  const performAutoSearch = () => {
+    if (!autoSearchToggle.checked) return;
+
+    const keyword = document.getElementById('book-keyword-filter').value.trim();
+    const title = document.getElementById('book-title-filter').value.trim();
+    const author = document.getElementById('book-author-filter').value.trim();
+    const isbn = document.getElementById('book-isbn-filter').value.trim();
+    const available = document.getElementById('book-available-filter').value;
+
+    const filters = {};
+    if (keyword) filters.keyword = keyword;
+    if (title) filters.title = title;
+    if (author) filters.author = author;
+    if (isbn) filters.isbn = isbn;
+    if (available) filters.available = available;
+
+    loadBooks(1, 12, filters);
+  };
+
+  filterInputs.forEach(inputId => {
+    const element = document.getElementById(inputId);
+    element.addEventListener('input', performAutoSearch);
+    element.addEventListener('change', performAutoSearch);
+    element.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('apply-book-filters').click();
+      }
+    });
+  });
+
   document.getElementById('apply-book-filters').addEventListener('click', () => {
-    const title = document.getElementById('book-title-filter').value;
-    const author = document.getElementById('book-author-filter').value;
-    loadBooks(1, 12, { title, author });
+    const keyword = document.getElementById('book-keyword-filter').value.trim();
+    const title = document.getElementById('book-title-filter').value.trim();
+    const author = document.getElementById('book-author-filter').value.trim();
+    const isbn = document.getElementById('book-isbn-filter').value.trim();
+    const available = document.getElementById('book-available-filter').value;
+
+    const filters = {};
+    if (keyword) filters.keyword = keyword;
+    if (title) filters.title = title;
+    if (author) filters.author = author;
+    if (isbn) filters.isbn = isbn;
+    if (available) filters.available = available;
+
+    loadBooks(1, 12, filters);
+  });
+
+  document.getElementById('clear-book-filters').addEventListener('click', () => {
+    document.getElementById('book-keyword-filter').value = '';
+    document.getElementById('book-title-filter').value = '';
+    document.getElementById('book-author-filter').value = '';
+    document.getElementById('book-isbn-filter').value = '';
+    document.getElementById('book-available-filter').value = '';
+    loadBooks(1, 12, {});
   });
 
   document.getElementById('create-book-btn').addEventListener('click', createBookForm);
@@ -288,7 +408,7 @@ function createBookForm() {
         loadBooks();
         showAlert('Livro cadastrado com sucesso!', 'success');
       } else {
-        showAlert(data.error, 'danger');
+        showAlert(getErrorMessage(data), 'danger');
       }
     } catch (err) {
       showAlert('Erro: ' + err.message, 'danger');
@@ -318,7 +438,7 @@ async function viewBook(id) {
       `;
       modal.show();
     } else {
-      showAlert(book.error, 'danger');
+      showAlert(getErrorMessage(book), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -330,7 +450,7 @@ async function editBook(id) {
     const res = await apiCall(`${API_BASE}/api/books/${id}`);
     const book = await res.json();
     if (!res.ok) {
-      showAlert(book.error, 'danger');
+      showAlert(getErrorMessage(book), 'danger');
       return;
     }
 
@@ -392,7 +512,7 @@ async function editBook(id) {
           loadBooks();
           showAlert('Livro atualizado com sucesso!', 'success');
         } else {
-          showAlert(data.error, 'danger');
+          showAlert(getErrorMessage(data), 'danger');
         }
       } catch (err) {
         showAlert('Erro: ' + err.message, 'danger');
@@ -413,7 +533,7 @@ async function deleteBook(id) {
       showAlert('Livro deletado com sucesso!', 'success');
     } else {
       const data = await res.json();
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -435,7 +555,7 @@ async function loanBook(bookId) {
       loadBooks();
       showAlert('Livro emprestado com sucesso!', 'success');
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -450,7 +570,7 @@ async function loadMyLoans(page = 1, limit = 10) {
     if (res.ok) {
       renderLoans(data.data, data.meta, 'Meus Empréstimos');
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -464,7 +584,7 @@ async function loadAllLoans(page = 1, limit = 10) {
     if (res.ok) {
       renderLoans(data.data, data.meta, 'Todos os Empréstimos');
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -541,7 +661,7 @@ async function returnBook(loanId) {
       loadMyLoans();
       showAlert('Livro devolvido com sucesso!', 'success');
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -561,7 +681,7 @@ async function loadUsers(page = 1, limit = 10) {
     if (res.ok) {
       renderUsers(data.data, data.meta);
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -638,7 +758,7 @@ async function viewUser(id) {
       `;
       modal.show();
     } else {
-      showAlert(user.error, 'danger');
+      showAlert(getErrorMessage(user), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -662,7 +782,7 @@ async function editUser(id) {
       loadUsers();
       showAlert('Usuário atualizado!', 'success');
     } else {
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
@@ -678,7 +798,7 @@ async function deleteUser(id) {
       showAlert('Usuário deletado!', 'success');
     } else {
       const data = await res.json();
-      showAlert(data.error, 'danger');
+      showAlert(getErrorMessage(data), 'danger');
     }
   } catch (err) {
     showAlert('Erro: ' + err.message, 'danger');
