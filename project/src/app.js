@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const { initDB } = require('./config/db');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -7,7 +8,7 @@ const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 initDB().catch((err) => {
   console.error('Falha ao inicializar o banco de dados:', err);
